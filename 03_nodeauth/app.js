@@ -9,7 +9,15 @@ var LocalStrategy = require('passport-local').Strategy;
 var bodyParser = require('body-parser');
 var multer = require('multer');
 var flash = require('connect-flash');
-var expressValidator = require('express-validator')
+
+const { check, validationResult } = require('express-validator');
+
+var app = express(); // Déplacer cette ligne ici
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use(check());
 
 var mongo = require('mongodb');
 var mongoose = require('mongoose');
@@ -18,11 +26,9 @@ var db = mongoose.connection;
 var routes = require('./routes/index');
 var users = require('./routes/users');
 
-var app = express();
-
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'jade');
+app.set('view engine', 'pug');
 
 // FileUpload handle
 app.use( multer({dest: './uploads'}).single('profileimage'));
@@ -46,24 +52,29 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // Validator
-app.use(expressValidator({
-	errorFormatter: function(param, msg, value){
-		var namespace = param.split('.'),
-		root = namespace.shift(),
-		formParam = root;
-		
-		while(namespace.length){
-			formParam += '[' + namespace.shift() + ']';
-		}
-		
-		return{
-			param: formParam,
-			msg: msg,
-			value: value
-		}
-	}
-}));
+app.use((req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    const formattedErrors = errors.array().map((error) => {
+      const namespace = error.param.split('.');
+      const root = namespace.shift();
+      const formParam = root;
 
+      while (namespace.length) {
+        formParam += '[' + namespace.shift() + ']';
+      }
+
+      return {
+        param: formParam,
+        msg: error.msg,
+        value: error.value,
+      };
+    });
+
+    return res.status(422).json({ errors: formattedErrors });
+  }
+  next();
+});
 
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -111,6 +122,5 @@ app.use(function(err, req, res, next) {
     error: {}
   });
 });
-
 
 module.exports = app;
